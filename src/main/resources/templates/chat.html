@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+<meta charset="UTF-8">
+<title>聊天页面</title>
+<style>
+	#chatContent{
+		list-style: none;
+	}
+	#chatContent>li{
+		color: #1CE;
+		font-size: 20px;
+		border-bottom: 1px solid #eee;
+		margin: 10px;
+		vertical-align: middle;
+	}
+	.senderSpan{
+		color: #2BF;
+		background: #cdc;
+		display:inline-block;
+		width: 150px;
+		height: 35px;
+		line-height: 35px;
+		font-weight: bold;
+		text-align: center;
+		margin-right: 10px;
+	}
+</style>
+</head>
+<body>
+	chatting!!!!!
+	欢迎你！
+	<span th:object="${session['USER_INFO']}">
+		<span th:text="*{name}"></span>
+		<span th:text="*{userId}"></span>
+	</span>
+	
+	<div id="allCotent">
+		<ul id="chatContent">
+		</ul>
+	</div>
+	
+	<input type="text" name="message" id="message">
+	<input type="button" value="发送" onclick="send()">
+	<input type="file" name="sendImage" id="file" value="发图片" onchange="upload()">
+	<script>
+		var ws = new WebSocket("ws://" + window.location.host + "/mychat");
+		ws.onopen=function(){
+			console.log("websocket open");
+		}
+		ws.onmessage=function(evt){
+			//console.log("websocket getmessage:"+evt.data);
+			
+			if(typeof evt.data=="string"){ //文本消息
+				var pushMessage = JSON.parse(evt.data);
+				if(pushMessage.type=="TEXT"){
+					var item = document.createElement("li");
+					item.innerHTML="<span class='senderSpan'>"+pushMessage.fromUser.name + ": </span>" + pushMessage.content;
+					document.getElementById("chatContent").appendChild(item);
+				}else if(pushMessage.type="IMAGE"){
+					var item = document.createElement("li");
+					item.innerHTML = "<span class='senderSpan'>"+pushMessage.fromUser.name + ": </span>";
+					document.getElementById("chatContent").appendChild(item);
+				}
+			}else{//图片消息
+				var reader = new FileReader();
+				reader.onload = function(event){
+					if (event.target.readyState == FileReader.DONE){
+						var img = document.createElement("img");
+						img.setAttribute("width","200");
+						//img.setAttribute("height","200");
+						img.style.setProperty("vertical-align","middle");
+						img.src = this.result;
+						document.getElementById("chatContent").lastChild.appendChild(img);
+					}
+				};
+				reader.readAsDataURL(evt.data);
+			}
+		}
+		function send(){
+			ws.send(document.getElementById("message").value);
+		}
+		
+		function upload(){
+			var inputElement = document.getElementById("file");
+			var file = inputElement.files[0];
+			var reader = new FileReader();
+
+			reader.readAsArrayBuffer(file);
+			reader.onload = function loaded(evt) {
+		        var binaryString = evt.target.result;
+				ws.binaryType="blob";	           
+		        ws.send(binaryString);
+			}
+		}
+	</script>
+</body>
+</html>

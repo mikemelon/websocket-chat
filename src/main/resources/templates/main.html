@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>WebSocket Chat</title>
+    <link rel="shortcut icon" href="images/wechat.ico" type="image/x-icon">
+    <link rel="stylesheet" href="css/main.css">
+    <script src="js/mustache.min.js"></script>
+    <script src="js/dateUtils.js"></script>
+</head>
+<body>
+    
+    <div id="chat">
+
+        <div class="sidebar">
+
+            <div class="m-card">
+                <header>
+                    <img class="avatar" src="images/avatar1.png" width="40" height="40">
+                    <p class="name">我自己</p>
+                </header>
+                <footer>
+                    <input class="search" placeholder="search user...">
+                </footer>
+            </div>
+
+            <div class="m-list">
+                <ul>
+                    <li class="active">
+                        <img class="avatar" src="images/avatar1.png" width="40" height="40">
+                        <p class="name">所有人</p> 
+                    </li>
+                    <li>
+                        <img class="avatar" src="images/avatar2.png" width="40" height="40">
+                        <p class="name">Java老师</p> 
+                    </li>
+                </ul>
+            </div>
+
+        </div>
+
+        <div class="main">
+
+            <div class="m-message">
+                <ul id="show-message">
+                    <li>
+                        <p class="time"><span>公元前271年5月2日13:07:12</span></p>
+                        <div class="main">
+                            <img class="avatar" width="30" height="30" src="images/avatar1.png">
+                            <div class="nick">某个人</div>
+                            <div class="text">这是其他人发来的信息测试！</div>
+                        </div>
+                    </li>
+
+                    <li>
+                        <p class="time"><span>公元前271年5月2日13:07:29</span></p>
+                        <div class="main self">
+                            <img class="avatar" width="30" height="30" src="images/avatar2.png">
+                            <div class="nick">Java老师</div>
+                            <div class="text">这是自发内容的一个测试</div>
+                        </div>
+                    </li>
+
+                </ul>
+
+            </div>
+
+            <div class="m-text">
+            	<div class="toolbar">
+            		<a class="select-pic" title="选择图片" onclick="emulateSelectFile()"></a>
+            		<input type="file" name="sendImage" id="file" style="display:none;" onchange="upload()">
+            	</div>
+                <textarea id="messageInput" name="messageInput" placeholder="按下Ctrl+Enter发送"></textarea>
+                <div class="action">
+                	<input type="button" class="btn_send" value="发送" onclick="send()">
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+    <script id="text_messge_tpl" type="text/html">
+	    <li>
+			<p class="time"><span>{{sendtime}}</span></p>
+			<div class="main {{self}}">
+				<img class="avatar" width="30" height="30" src="images/avatar2.png">
+				<div class="nick">{{username}}</div>
+				<div class="text">{{message}}</div>
+			</div>
+		</li>
+	</script>
+	<script id="img_messge_tpl" type="text/html">
+	    <li>
+			<p class="time"><span>{{sendtime}}</span></p>
+			<div class="main {{self}}">
+				<img class="avatar" width="30" height="30" src="images/avatar2.png">
+				<div class="nick">{{username}}</div>
+				<div class="pic"></div>
+			</div>
+		</li>
+	</script>
+	<script th:inline="javascript">
+	    var currentUserName = [[${session['USER_INFO'].name}]];
+	    console.log("当前用户:"+currentUserName);
+	</script>
+    <script>
+        //让消息一开始就滚动到底部
+    	var messagePane = document.getElementsByClassName("m-message")[0];
+    	messagePane.scroll(0, messagePane.scrollHeight);
+        
+        //websocket接收数据
+        var ws = new WebSocket("ws://" + window.location.host + "/mychat");
+		ws.onopen=function(){
+			console.log("websocket open");
+		}
+		ws.onmessage=function(evt){
+			//console.log("websocket getmessage:"+evt.data);
+			
+			if(typeof evt.data=="string"){ //文本消息
+				var pushMessage = JSON.parse(evt.data);
+				if(pushMessage.type=="TEXT"){
+					
+					var textMsgTemplate = document.getElementById('text_messge_tpl').innerHTML.trim();
+					Mustache.parse(textMsgTemplate);
+					var htmlAfterRendered = Mustache.render(textMsgTemplate, {
+						username:pushMessage.fromUser.name,
+						message:pushMessage.content,
+						sendtime: datetimeFormat_1(pushMessage.sendDate),
+						self: (currentUserName==pushMessage.fromUser.name)?"self":"",
+					});
+					document.getElementById("show-message").innerHTML += htmlAfterRendered;
+					messagePane.scroll(0, messagePane.scrollHeight);
+				}else if(pushMessage.type="IMAGE"){
+					var textMsgTemplate = document.getElementById('img_messge_tpl').innerHTML.trim();
+					Mustache.parse(textMsgTemplate);
+					var htmlAfterRendered = Mustache.render(textMsgTemplate, {
+						username:pushMessage.fromUser.name,
+						sendtime: datetimeFormat_1(pushMessage.sendDate),
+						self: (currentUserName==pushMessage.fromUser.name)?"self":"",
+					});
+					document.getElementById("show-message").innerHTML += htmlAfterRendered;
+					messagePane.scroll(0, messagePane.scrollHeight);
+					
+//					var item = document.createElement("li");
+//					item.innerHTML = "<span class='senderSpan'>"+pushMessage.fromUser.name + ": </span>";
+//					document.getElementById("show-message").appendChild(item);
+				}
+			}else{//图片消息
+				var reader = new FileReader();
+				reader.onload = function(event){
+					if (event.target.readyState == FileReader.DONE){
+						var img = document.createElement("img");
+						img.setAttribute("width","200");
+						img.style.setProperty("vertical-align","middle");
+						img.src = this.result;
+						document.getElementById("show-message").lastChild.getElementsByClassName("pic")[0].appendChild(img);
+						setTimeout(function(){
+							messagePane.scroll(0, messagePane.scrollHeight);
+						},500);//延时一下，否则可能图片没载入时滚动，不会滚动到底部
+					}
+				};
+				reader.readAsDataURL(evt.data);
+				
+			}
+		}
+		//websocket发送文本数据
+		function send(){
+			var textInput = document.getElementById("messageInput");
+			ws.send(textInput.value);
+			textInput.value = "";
+		}
+		
+		function upload(){
+			var inputElement = document.getElementById("file");
+			var file = inputElement.files[0];
+			var reader = new FileReader();
+
+			reader.readAsArrayBuffer(file);
+			reader.onload = function loaded(evt) {
+		        var binaryString = evt.target.result;
+				ws.binaryType="blob";	           
+		        ws.send(binaryString);
+			}
+		}
+		
+		function emulateSelectFile(){
+			var inputElement = document.getElementById("file");
+			inputElement.click();
+		}
+    </script>
+</body>
+</html>
